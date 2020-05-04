@@ -1,0 +1,260 @@
+#include <LiquidCrystal_I2C.h>
+#include <Servo.h>
+#include <Wire.h>
+//#include <SoftwareSerial.h>
+
+typedef struct
+{
+int nr_poz;
+int fotorezistor;
+String drum;
+}Perechi;
+
+Perechi pair[4];
+
+int locuriParcareDisponibile=3;
+
+const int triggerPin = 13; //Emitator Senzor1
+const int echoPin = 12; //Receptor Senzor1
+
+const int triggerPin1 = 10 ; //Emitator Senzor2
+const int echoPin1 = 11; //Receptor Senzor2
+
+const int ldrPin =A0;
+
+//Added
+const int ldrPin1 =A1;
+const int ldrPin2 =A2;
+const int ldrPin3 =A3;
+
+//
+
+bool car_passing = false;
+
+Servo myservo;
+
+long duration;
+int distance;
+int pos = 0;
+int x;
+int y; //adaugat
+
+LiquidCrystal_I2C lcd(0x27,16,2);
+
+long microseconds;
+
+int readRange() { //Timp -> Cm pentru Senzor1
+
+long duration, cm;
+
+digitalWrite(triggerPin, LOW);
+delayMicroseconds(2);
+digitalWrite(triggerPin, HIGH);
+delayMicroseconds(10);
+digitalWrite(triggerPin, LOW);
+delayMicroseconds(2);
+
+duration = pulseIn(echoPin, HIGH);
+cm = microsecondsToCentimeters(duration);
+
+return cm;
+
+}
+
+int readRange1() { //Timp -> Cm pentru Senzor2
+
+long duration, cm;
+
+digitalWrite(triggerPin1, LOW);
+delayMicroseconds(2);
+digitalWrite(triggerPin1, HIGH);
+delayMicroseconds(10);
+digitalWrite(triggerPin1, LOW);
+delayMicroseconds(2);
+
+duration = pulseIn(echoPin1, HIGH);
+cm = microsecondsToCentimeters(duration);
+
+return cm;
+
+}
+
+long microsecondsToCentimeters(long microseconds)
+{
+return microseconds / 29 / 2; // 340 m/s -> x cm/s => 29... /2 ca ma intereaza doar distanta pana la masina ,nu si invers
+
+}
+
+void Deschide_Bariera() {
+if(locuriParcareDisponibile<=3)
+{
+for (pos = 180; pos >=90 ; pos -= 1) // Se ridica bariera de la 0 la 90 grade fata de cum privesc eu
+{
+myservo.write(pos);
+delay(10); // Astept ca Servo sa ajunga in pozitia "pos"
+}
+
+}
+}
+
+void Inchide_Bariera() {
+
+for (pos = 90; pos<=180; pos += 1) // Coboara bariera de la 90 la 0 grade
+{
+myservo.write(pos);
+delay(10); // Astept ca Servo sa ajunga la pozitia "pos"
+}
+}
+
+String minim()
+{
+int min=10;
+int index=0;
+for(int i=1;i<=3;i++)
+if(pair[i].nr_poz<min)
+{
+min=pair[i].nr_poz;
+index=i;
+}
+
+return pair[index].drum;
+}
+
+void setPozitiaOcupata(int index)//Ajutatoare
+{
+pair[index].nr_poz=10; //Ocupata
+}
+
+void setPozitiaLibera(int index)//Ajutatoare
+{
+pair[index].nr_poz=index;
+}
+
+void SetPozOcupata_sau_Libera(int index)
+{
+int verifica= analogRead(pair[index].fotorezistor);
+
+if(verifica<200)//Adica intuneric
+setPozitiaOcupata(index);
+else setPozitiaLibera(index);
+
+}
+
+void actualizare_pozitii()
+{
+for(int i=1;i<=3;i++)//6
+SetPozOcupata_sau_Libera(i);
+}
+
+void setup() {
+
+Serial.begin(9600);
+myservo.attach(9); // Leg pe Servo la pin 9
+pinMode(triggerPin, OUTPUT); // Semnalul care porneste
+pinMode(echoPin, INPUT); // Semnalul care se intoarce
+
+pinMode(triggerPin1, OUTPUT); // Semnalul care porneste
+pinMode(echoPin1, INPUT); // Semnalul care se intoarce
+
+pinMode(ldrPin,INPUT);
+
+lcd.init(); // Se porneste ecranul LCD-ului
+lcd.backlight(); // Se porneste lumina backlight
+lcd.setCursor(0,0);
+lcd.print("Cel mai scurt drum:");
+lcd.setCursor(0,1);
+
+pair[0].drum="Parcare Plina";
+pair[1].drum="F ";
+pair[2].drum="FDS ";
+pair[3].drum="FDFS ";
+
+lcd.print(pair[1].drum);
+
+myservo.write(180);
+
+pair[1].fotorezistor=ldrPin1;
+pair[2].fotorezistor=ldrPin2;
+pair[3].fotorezistor=ldrPin3;
+
+}
+
+void loop() { //E main-ul
+
+int verifica_daca_a_intrat=0;
+int range = readRange();
+delay(100);
+int range1 = readRange1();
+//int ldrStatus = analogRead(ldrPin);
+
+delay(10);
+
+actualizare_pozitii();
+
+if(locuriParcareDisponibile♥){ //Daca inca nu am atins maximul de locuri libere (ca sa stie sa nu imi creasca mai mult ca 3)
+if(
+( range >= 13 && range<=21 ) //Daca valoarea citita de Senzor1 e intre 13 si 21 cm
+&&
+( range1 >= 13 && range1<=21 )
+&&!car_passing
+
+) //Daca la masurarea trecuta nu iese nici o masina (ca sa nu mi-l vada tot pe cea curenta si sa imi incrementeze pt aceiasi masina de mai multe ori
+
+{
+
+car_passing = true;
+delay(1000);
+locuriParcareDisponibile = locuriParcareDisponibile + 1;//Masina iese din parcare, numarul de locuri disponibile creste
+lcd.setCursor(0,1);
+//lcd.print(" ");
+//lcd.setCursor(0,1);
+
+//delay(2000);
+actualizare_pozitii();
+String drum =minim();
+lcd.print(drum);
+
+}
+
+}
+if(car_passing==true)
+{delay(1000);
+if((y=readRange())>21 &&(x=readRange1())>21 )
+car_passing=false;
+}
+
+if(locuriParcareDisponibile>0){ //Daca mai am cel putin un loc in parcare (ca sa stie sa nu imi scada numarul de locuri sub 0)
+if((range<8 && range1<8 ) //Daca valoarea citita de Senzor2 de distanta e intre 0 si 8 cm
+
+) //Daca la masurarea trecuta nu intra nicio masina (ca sa nu mi-o vada tot pe cea curenta si sa imi decrementeze pt aceiasi masina de mai multe ori
+{
+
+Deschide_Bariera();//Bariera se deschide si se inchide
+delay(2000);
+
+while( (ldrStatus= analogRead(ldrPin))<700)
+{ verifica_daca_a_intrat=1;
+
+}
+
+if(ldrStatus>=700)
+{
+delay(1000);
+Inchide_Bariera();
+}
+
+if(verifica_daca_a_intrat==1)
+{locuriParcareDisponibile = locuriParcareDisponibile - 1;//Masina intra in parcare ,iar numarul de locuri scade
+lcd.setCursor(0,1);
+
+delay(3000);
+actualizare_pozitii();
+String drum =minim();
+lcd.print(drum);
+}
+verifica_daca_a_intrat=0;
+
+}
+}
+
+}
